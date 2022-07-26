@@ -58,7 +58,7 @@ exports.userLogin = async (req, res) => {
     if (!userRoleMatch)
       return res
         .status(400)
-        .send({ success: false, msg: "Unauthorized Login" });
+        .send({ success: false, msg: "User role does not match" });
     if (userRoleMatch) {
       bcrypt.compare(req.body.password, userExist.password, (err, result) => {
         if (err) {

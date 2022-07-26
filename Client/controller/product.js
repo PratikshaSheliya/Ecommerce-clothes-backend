@@ -1,4 +1,7 @@
 const product = require("../modules/product");
+const wishlist = require("../modules/wish_list");
+const cart = require("../modules/cart");
+const userProfile = require("../modules/client_login");
 const fs = require("fs");
 const path = require("path");
 
@@ -179,7 +182,7 @@ exports.UpdateProduct = async (req, res) => {
         .exec();
 
       if (req.files.images) {
-        console.log('if req.files');
+        console.log("if req.files");
         for (let i = 0; i < req.files.images.length; i++) {
           const x = req.files.images[i];
           result = await product
@@ -189,11 +192,214 @@ exports.UpdateProduct = async (req, res) => {
             .lean()
             .exec();
         }
-      } 
+      }
       res.status(200).send({ success: true, data: result });
     }
   } catch (error) {
     res.status(400).send({ error: error });
     console.log("error", error);
+  }
+};
+
+//all products
+exports.getAllProducts = async (req, res) => {
+  try {
+    const category_product = req.query.category;
+    const collection_product = req.query.collection;
+    const newIn_Product = req.query.newin;
+    const allProducts = await product.find();
+    const cat_Products = await product.find({ category: category_product });
+    const collection_Products = await product.find({
+      product_collection: collection_product,
+    });
+
+    var myCurrentDate = new Date();
+    var myPastDate = new Date(myCurrentDate);
+    myPastDate.setDate(myPastDate.getDate() - 5);
+
+    myCurrentDate = myCurrentDate.toISOString().split("T")[0];
+    myPastDate = myPastDate.toISOString().split("T")[0];
+
+    const newInProduct = await product.find({
+      date: { $gte: myPastDate, $lte: myCurrentDate },
+    });
+
+    if (req.query.category) {
+      res.status(200).send({
+        success: true,
+        data: cat_Products,
+        length: cat_Products.length,
+      });
+    } else if (req.query.collection) {
+      res.status(200).send({
+        success: true,
+        data: collection_Products,
+        length: collection_Products.length,
+      });
+    } else if (req.query.newin) {
+      res.status(200).send({
+        success: true,
+        data: newInProduct,
+        length: newInProduct.length,
+      });
+    } else {
+      res
+        .status(200)
+        .send({ success: true, data: allProducts, length: allProducts.length });
+    }
+  } catch (error) {
+    res.status(400).send({ success: false, error: error });
+    console.log("error", error);
+  }
+};
+
+//add wishlist
+exports.addWishList = async (req, res) => {
+  try {
+    const { user_id, product_id } = req.body;
+
+    const userFindId = await wishlist.findOne({ user_id });
+    const productFindId = await wishlist.findOne({ product_id });
+
+    let ProductId = [];
+    if (userFindId) {
+      if (!productFindId) {
+        const updateResult = await wishlist.findByIdAndUpdate(userFindId, {
+          $push: { product_id: product_id },
+        });
+        res.status(200).send({
+          success: true,
+          data: updateResult,
+          msg: "Successfully Add this Product to your wishlist",
+        });
+      } else {
+        res.status(200).send({
+          success: false,
+          msg: "already added this product to wish list",
+        });
+      }
+    } else {
+      ProductId.push(product_id);
+      const wishlistData = new wishlist({
+        user_id,
+        product_id: ProductId,
+      });
+      const result = await wishlistData.save();
+      res.status(200).send({
+        success: true,
+        data: result,
+        msg: "Successfully Add this Product to your wishlist",
+      });
+    }
+  } catch (error) {
+    res.status(400).send({ success: false, error: error });
+    console.log("error=>", error);
+  }
+};
+
+//get wishlist data
+exports.getWishList = async (req, res) => {
+  try {
+    const user_id = req.userdata.userId;
+    const getProductId = await wishlist.find({ user_id });
+    const filter = { _id: { $in: getProductId[0].product_id } };
+    let result = product
+      .find()
+      .where(filter)
+      .then((resp) => {
+        console.log("res", resp);
+        res.status(200).send({ success: true, data: resp });
+      })
+      .catch((err) => {
+        res.send({ success: false, err: err, statusCode: 400 });
+        console.log("err", err);
+      });
+    // let product_array = []
+    // if (getProductId) {
+    //   const products = getProductId[0].product_id;
+    //   for (let i = 0; i < products.length; i++) {
+    //     const element = products[i];
+    //     const wishListData = await product.find({ _id: element }).lean().exec();
+    //     product_array[i] = wishListData
+    //   }
+    //   // console.log("product_array",product_array);
+    // }
+  } catch (error) {
+    res.status(400).send({ success: false, error: error });
+    console.log("error", error);
+  }
+};
+
+//remove wishlist
+exports.deleteWishList = async (req, res) => {
+  try {
+    const user_id = req.userdata.userId;
+    const { product_id } = req.body;
+    console.log("productid", product_id);
+    const userFindId = await wishlist.findOne({ user_id });
+    const result = await wishlist
+      .findByIdAndUpdate(userFindId, { $pull: { product_id: product_id } })
+      .lean()
+      .exec();
+    res.send({ data: result, success: true });
+  } catch (error) {
+    res.send({ error: error, success: false });
+  }
+};
+
+exports.addCart = async (req, res) => {
+  try {
+    const { product_id } = req.body;
+
+    // const userFindId = await cart.findOne({ user_id });
+    // const productFindId = await cart.findOne({ product_id });
+    // console.log("productFindId", productFindId);
+    let user_id = req.userdata.userId;
+    const cartData = new cart({
+      user_id,
+      cart_details: {
+        product_id: product_id,
+        quantity: 1
+      }
+    });
+    const result = await cartData.save();
+    res.status(200).send({
+      success: true,
+      data: result,
+      msg: "Successfully Add this Product to your cart",
+    });
+
+    // if (userFindId) {
+    //   if (!productFindId) {
+    //     const updateResult = await cart.findByIdAndUpdate(userFindId, {
+    //       $push: { product_id: product_id },
+    //     });
+    //     res.status(200).send({
+    //       success: true,
+    //       data: updateResult,
+    //       msg: "Successfully Add this Product to your cart",
+    //     });
+    //   } else {
+    //     res.status(200).send({
+    //       success: false,
+    //       msg: "already added this product to wish list",
+    //     });
+    //   }
+    // } else {
+    //   ProductId.push(product_id);
+    //   const cartData = new cart({
+    //     user_id,
+    //     product_id: ProductId,
+    //   });
+    //   const result = await cartData.save();
+    //   res.status(200).send({
+    //     success: true,
+    //     data: result,
+    //     msg: "Successfully Add this Product to your cart",
+    //   });
+    // }
+  } catch (error) {
+    res.status(400).send({ success: false, error: error });
+    console.log("error=>", error);
   }
 };
