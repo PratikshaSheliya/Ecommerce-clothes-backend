@@ -6,7 +6,7 @@ const path = require("path");
 const auth = require("../../Middleware/auth");
 const multer = require("multer");
 const fs = require("fs");
-const { AddProduct ,showProduct,DeleteProduct,GetOneProduct,DeleteImages,UpdateProduct,getAllProducts,addWishList,getWishList,deleteWishList,addCart} = require("../controller/product");
+const { AddProduct ,showProduct,DeleteProduct,GetOneProduct,DeleteImages,UpdateProduct,getAllProducts,addWishList,getWishList,deleteWishList,addCart,getCart,deleteCart} = require("../controller/product");
 
 const bannerStorage = multer.diskStorage({
   destination: async function (req, file, cb) {
@@ -52,6 +52,8 @@ productrouter.get("/products", getAllProducts);
 productrouter.post("/addwishlist",addWishList)
 productrouter.get("/wishlistdata",auth,getWishList)
 productrouter.delete("/deletewishlist",auth,deleteWishList)
-productrouter.post("/addcart",auth,addCart)
+productrouter.post("/addcart",addCart)
+productrouter.get("/getcart",auth,getCart)
+productrouter.delete("/deletecart",auth,deleteCart)
 
 module.exports = productrouter;

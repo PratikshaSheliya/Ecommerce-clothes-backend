@@ -7,6 +7,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 const cors = require("cors");
 app.use(cors());
+const morgan = require('morgan');
+app.use(morgan('dev'));
 const path = require("path");
 app.use(express.static(path.join(__dirname, "./public")));
 const adminrouter = require("./Admin/router/admin_login");

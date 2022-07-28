@@ -4,6 +4,7 @@ const cart = require("../modules/cart");
 const userProfile = require("../modules/client_login");
 const fs = require("fs");
 const path = require("path");
+const e = require("express");
 
 //Add Product
 exports.AddProduct = async (req, res) => {
@@ -302,6 +303,7 @@ exports.getWishList = async (req, res) => {
   try {
     const user_id = req.userdata.userId;
     const getProductId = await wishlist.find({ user_id });
+    console.log("getProductId[0].product_id ", getProductId[0].product_id);
     const filter = { _id: { $in: getProductId[0].product_id } };
     let result = product
       .find()
@@ -347,59 +349,153 @@ exports.deleteWishList = async (req, res) => {
   }
 };
 
+//add to cart
 exports.addCart = async (req, res) => {
   try {
-    const { product_id } = req.body;
+    const { product_id, user_id } = req.body;
+    // let user_id = req.userdata.userId;
+    const userId = await cart.findOne({ user_id });
 
-    // const userFindId = await cart.findOne({ user_id });
-    // const productFindId = await cart.findOne({ product_id });
-    // console.log("productFindId", productFindId);
-    let user_id = req.userdata.userId;
-    const cartData = new cart({
-      user_id,
-      cart_details: {
-        product_id: product_id,
-        quantity: 1
+    const productId = await cart.findOne({ user_id: user_id }).select({
+      user_id: user_id,
+      cart_details: { $elemMatch: { product_id: product_id } },
+    });
+    console.log("product_id", product_id);
+    console.log("productId", productId);
+
+    if (userId) {
+      if (productId.cart_details.length != 0) {
+        const updateQuantity = await cart.updateOne(
+          { user_id: user_id, "cart_details.product_id": product_id },
+          {
+            $set: {
+              "cart_details.$.quantity": productId.cart_details[0].quantity + 1,
+            },
+          },
+          {
+            new: true,
+          }
+        );
+
+        console.log("updateQuantity", updateQuantity);
+        res.send({ msg: "Quantity", updateQuantity: updateQuantity });
+        // res.send({ msg: " ++ qunatity"  });
+      } else {
+        const updateResult = await cart
+          .findByIdAndUpdate(userId, {
+            $push: { cart_details: { product_id: product_id, quantity: 1 } },
+          })
+          .lean()
+          .exec();
+        console.log("updateResult", updateResult);
+
+        res.send({
+          success: true,
+          data: updateResult,
+          msg: "Successfully Add this Product to your cart",
+        });
       }
-    });
-    const result = await cartData.save();
-    res.status(200).send({
-      success: true,
-      data: result,
-      msg: "Successfully Add this Product to your cart",
-    });
-
-    // if (userFindId) {
-    //   if (!productFindId) {
-    //     const updateResult = await cart.findByIdAndUpdate(userFindId, {
-    //       $push: { product_id: product_id },
-    //     });
-    //     res.status(200).send({
-    //       success: true,
-    //       data: updateResult,
-    //       msg: "Successfully Add this Product to your cart",
-    //     });
-    //   } else {
-    //     res.status(200).send({
-    //       success: false,
-    //       msg: "already added this product to wish list",
-    //     });
-    //   }
-    // } else {
-    //   ProductId.push(product_id);
-    //   const cartData = new cart({
-    //     user_id,
-    //     product_id: ProductId,
-    //   });
-    //   const result = await cartData.save();
-    //   res.status(200).send({
-    //     success: true,
-    //     data: result,
-    //     msg: "Successfully Add this Product to your cart",
-    //   });
-    // }
+    } else {
+      const cartData = new cart({
+        user_id: user_id,
+        cart_details: {
+          product_id: product_id,
+          quantity: 1,
+        },
+      });
+      const result = await cartData.save();
+      res.status(200).send({
+        success: true,
+        data: result,
+        msg: "Successfully Add this Product to your cart ===>",
+      });
+    }
   } catch (error) {
     res.status(400).send({ success: false, error: error });
     console.log("error=>", error);
+  }
+};
+
+//get cart data
+exports.getCart = async (req, res) => {
+  try {
+    const userId = req.userdata.userId;
+    const matchUserId = await cart.find({ user_id: userId });
+    let productArr = [];
+    let quantityArr = [];
+    for (let i = 0; i < matchUserId[0].cart_details.length; i++) {
+      const element = matchUserId[0].cart_details[i];
+      // console.log("element",element);
+      productArr.push(element.product_id);
+      quantityArr.push({
+        product_id: element.product_id,
+        quantity: element.quantity,
+      });
+    }
+
+    const filter = { _id: { $in: productArr } };
+    let result = product
+      .find()
+      .where(filter)
+      .then((resp) => {
+        let finalRes = [];
+        for (let i = 0; i < resp.length; i++) {
+          const element = resp[i];
+          const ans = Object.assign(
+            { cart_quantity: quantityArr[i].quantity },
+            element._doc
+          );
+          finalRes.push(ans);
+        }
+        res.status(200).send({ success: true, data: finalRes });
+      })
+      .catch((err) => {
+        res.send({ success: false, err: err, statusCode: 400 });
+        console.log("err", err);
+      });
+  } catch (error) {
+    res.send({ success: false, error: error });
+    console.log("error => ", error);
+  }
+};
+
+//remove cart data
+exports.deleteCart = async (req, res) => {
+  const { product_id } = req.body;
+  const user_id = req.userdata.userId;
+
+  const productId = await cart.findOne({ user_id: user_id }).select({
+    user_id: user_id,
+    cart_details: { $elemMatch: { product_id: product_id } },
+  });
+
+  if (productId.cart_details[0].quantity != 1) {
+    const updateQuantity = await cart.updateOne(
+      { user_id: user_id, "cart_details.product_id": product_id },
+      {
+        $set: {
+          "cart_details.$.quantity": productId.cart_details[0].quantity - 1,
+        },
+      },
+      {
+        new: true,
+      }
+    );
+    res.send({ msg: "-1 quantity", data: updateQuantity });
+  } else {
+    const deleteProduct = await cart.findOneAndUpdate(
+      { user_id: user_id },
+      {
+        $pull: {
+          cart_details: {
+            product_id: product_id,
+          },
+        },
+      },
+      {
+        new: true,
+      }
+    );
+    res.send({ msg: "delete", data: deleteProduct });
   }
 };
